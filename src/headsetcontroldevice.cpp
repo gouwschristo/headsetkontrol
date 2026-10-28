@@ -204,6 +204,20 @@ void HeadsetControlDevice::update(const QVariantHash &hash)
     // would not be the Nth preset. Older headsetcontrol builds do not emit
     // the array, and the UI falls back to "Preset N".
     setEqualizerPresetNames(hash.value(u"equalizer_presets_ordered"_s, QStringList()).toStringList());
+
+    // Some devices quantise sidetone: the Nova 5 has 11 steps between 0 and
+    // 128, and every other value is silently snapped. Offering the real steps
+    // is the difference between a control that means something and one that
+    // guesses for the user.
+    {
+        QList<int> levels;
+        const QVariantList raw = hash.value(u"sidetone"_s).toHash().value(u"levels"_s).toList();
+        levels.reserve(raw.size());
+        for (const QVariant &level : raw) {
+            levels.append(level.toInt());
+        }
+        setSidetoneLevels(levels);
+    }
     battery()->update(hash.value(u"battery"_s, QStringList()).toHash());
 
     if (product().length() > 0) {
@@ -340,6 +354,19 @@ int HeadsetControlDevice::sidetoneDeviceLevel() const
 QStringList HeadsetControlDevice::equalizerPresetNames() const
 {
     return m_equalizerPresetNames;
+}
+
+QList<int> HeadsetControlDevice::sidetoneLevels() const
+{
+    return m_sidetoneLevels;
+}
+
+void HeadsetControlDevice::setSidetoneLevels(const QList<int> &levels)
+{
+    if (m_sidetoneLevels == levels)
+        return;
+    m_sidetoneLevels = levels;
+    Q_EMIT sidetoneLevelsChanged();
 }
 
 void HeadsetControlDevice::setEqualizerPresetNames(const QStringList &names)

@@ -228,13 +228,32 @@ KirigamiFormCard.FormCardPage {
             }
         }
 
+        // Devices that quantise sidetone publish the steps they actually have
+        // (the Nova 5 has 11 between 0 and 128); anything else is snapped
+        // silently, so those get a picker over the real values instead of a
+        // free 0..128 spinner.
+        KirigamiFormCard.FormComboBoxDelegate {
+            id: sidetoneLevelDelegate
+
+            visible: (deviceDetailPage.device?.capabilities & Device.Sidetone ?? false)
+                     && (deviceDetailPage.device?.sidetoneLevels?.length ?? 0) > 0
+            text: i18nc("@label:listbox", "Sidetone")
+            model: deviceDetailPage.device?.sidetoneLevels ?? []
+            currentIndex: (deviceDetailPage.device?.sidetoneLevels ?? []).indexOf(deviceDetailPage.device?.sidetone ?? 0)
+            onActivated: function (index) {
+                if (deviceDetailPage.device)
+                    deviceDetailPage.device.sidetone = model[index];
+            }
+        }
+
         KirigamiFormCard.FormSpinBoxDelegate {
             id: sidetoneDelegate
 
             label: i18nc("@label:spinbox", "Sidetone")
             from: 0
             to: 128
-            visible: deviceDetailPage.device?.capabilities & Device.Sidetone ?? false
+            visible: (deviceDetailPage.device?.capabilities & Device.Sidetone ?? false)
+                     && (deviceDetailPage.device?.sidetoneLevels?.length ?? 0) === 0
 
             value: deviceDetailPage.device?.sidetone ?? 0
             onValueChanged: {

@@ -38,6 +38,7 @@ class HeadsetControlDevice : public QObject
     Q_PROPERTY(bool volumeLimiter READ volumeLimiter WRITE setVolumeLimiter NOTIFY volumeLimiterChanged FINAL)
     Q_PROPERTY(int sidetoneDeviceLevel READ sidetoneDeviceLevel NOTIFY sidetoneDeviceLevelChanged FINAL)
     Q_PROPERTY(QStringList equalizerPresetNames READ equalizerPresetNames NOTIFY equalizerPresetNamesChanged FINAL)
+    Q_PROPERTY(QList<int> sidetoneLevels READ sidetoneLevels NOTIFY sidetoneLevelsChanged FINAL)
 
     Q_PROPERTY(QAction *reApplyAction READ reApplyAction CONSTANT FINAL)
     Q_PROPERTY(QAction *setPrimaryAction READ setPrimaryAction CONSTANT FINAL)
@@ -119,6 +120,8 @@ public:
 
     QStringList equalizerPresetNames() const;
 
+    QList<int> sidetoneLevels() const;
+
     QAction *reApplyAction() const;
     QAction *setPrimaryAction() const;
 
@@ -152,6 +155,7 @@ Q_SIGNALS:
     void volumeLimiterChanged();
     void sidetoneDeviceLevelChanged();
     void equalizerPresetNamesChanged();
+    void sidetoneLevelsChanged();
 
 private:
     Status m_status;
@@ -168,6 +172,8 @@ private:
     Capabilities m_capabilities;
     int m_sidetoneDeviceLevel;
     QStringList m_equalizerPresetNames;
+    QList<int> m_sidetoneLevels;
+    void setSidetoneLevels(const QList<int> &levels);
 
     HeadsetControl *m_headsetControl;
 
