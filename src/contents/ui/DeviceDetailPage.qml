@@ -348,24 +348,35 @@ KirigamiFormCard.FormCardPage {
 
             visible: deviceDetailPage.device?.capabilities & Device.EqualizerPreset ?? false
             text: i18nc("@label:listbox", "Equalizer preset")
-            model: [
-                {
-                    "display": i18nc("@item:inlistbox", "Default"),
-                    "value": 0
-                },
-                {
-                    "display": i18nc("@item:inlistbox", "Preset %1", 1),
-                    "value": 1
-                },
-                {
-                    "display": i18nc("@item:inlistbox", "Preset %1", 2),
-                    "value": 2
-                },
-                {
-                    "display": i18nc("@item:inlistbox", "Preset %1", 3),
-                    "value": 3
+            // Names come from headsetcontrol in --equalizer-preset index
+            // order; without them (older builds) fall back to the numbers.
+            model: {
+                const names = deviceDetailPage.device?.equalizerPresetNames ?? [];
+                if (names.length > 0) {
+                    return names.map((name, index) => ({
+                        "display": name.charAt(0).toUpperCase() + name.slice(1),
+                        "value": index
+                    }));
                 }
-            ]
+                return [
+                    {
+                        "display": i18nc("@item:inlistbox", "Default"),
+                        "value": 0
+                    },
+                    {
+                        "display": i18nc("@item:inlistbox", "Preset %1", 1),
+                        "value": 1
+                    },
+                    {
+                        "display": i18nc("@item:inlistbox", "Preset %1", 2),
+                        "value": 2
+                    },
+                    {
+                        "display": i18nc("@item:inlistbox", "Preset %1", 3),
+                        "value": 3
+                    }
+                ];
+            }
             textRole: "display"
             valueRole: "value"
             currentIndex: deviceDetailPage.device?.equalizerPreset ?? 0

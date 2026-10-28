@@ -198,6 +198,12 @@ void HeadsetControlDevice::update(const QVariantHash &hash)
         const QVariantHash sidetone = hash.value(u"sidetone"_s).toHash();
         setSidetoneDeviceLevel(sidetone.value(u"device_level"_s, -1).toInt());
     }
+    // Preset names in the order --equalizer-preset indexes them. The
+    // equalizer_presets object cannot be used for this: its key order is not
+    // preserved by every JSON reader (Qt sorts object keys), so the Nth name
+    // would not be the Nth preset. Older headsetcontrol builds do not emit
+    // the array, and the UI falls back to "Preset N".
+    setEqualizerPresetNames(hash.value(u"equalizer_presets_ordered"_s, QStringList()).toStringList());
     battery()->update(hash.value(u"battery"_s, QStringList()).toHash());
 
     if (product().length() > 0) {
@@ -329,6 +335,19 @@ void HeadsetControlDevice::setVolumeLimiter(bool state)
 int HeadsetControlDevice::sidetoneDeviceLevel() const
 {
     return m_sidetoneDeviceLevel;
+}
+
+QStringList HeadsetControlDevice::equalizerPresetNames() const
+{
+    return m_equalizerPresetNames;
+}
+
+void HeadsetControlDevice::setEqualizerPresetNames(const QStringList &names)
+{
+    if (m_equalizerPresetNames == names)
+        return;
+    m_equalizerPresetNames = names;
+    Q_EMIT equalizerPresetNamesChanged();
 }
 
 void HeadsetControlDevice::setSidetoneDeviceLevel(int level)

@@ -37,6 +37,7 @@ class HeadsetControlDevice : public QObject
     Q_PROPERTY(int microphoneVolume READ microphoneVolume WRITE setMicrophoneVolume NOTIFY microphoneVolumeChanged FINAL)
     Q_PROPERTY(bool volumeLimiter READ volumeLimiter WRITE setVolumeLimiter NOTIFY volumeLimiterChanged FINAL)
     Q_PROPERTY(int sidetoneDeviceLevel READ sidetoneDeviceLevel NOTIFY sidetoneDeviceLevelChanged FINAL)
+    Q_PROPERTY(QStringList equalizerPresetNames READ equalizerPresetNames NOTIFY equalizerPresetNamesChanged FINAL)
 
     Q_PROPERTY(QAction *reApplyAction READ reApplyAction CONSTANT FINAL)
     Q_PROPERTY(QAction *setPrimaryAction READ setPrimaryAction CONSTANT FINAL)
@@ -116,6 +117,8 @@ public:
 
     int sidetoneDeviceLevel() const;
 
+    QStringList equalizerPresetNames() const;
+
     QAction *reApplyAction() const;
     QAction *setPrimaryAction() const;
 
@@ -148,6 +151,7 @@ Q_SIGNALS:
     void microphoneVolumeChanged();
     void volumeLimiterChanged();
     void sidetoneDeviceLevelChanged();
+    void equalizerPresetNamesChanged();
 
 private:
     Status m_status;
@@ -163,6 +167,7 @@ private:
 
     Capabilities m_capabilities;
     int m_sidetoneDeviceLevel;
+    QStringList m_equalizerPresetNames;
 
     HeadsetControl *m_headsetControl;
 
@@ -189,6 +194,7 @@ private:
     void applyMicrophoneVolume(int volume, bool force = false);
     void applyVolumeLimiter(bool state, bool force = false);
     void setSidetoneDeviceLevel(int level);
+    void setEqualizerPresetNames(const QStringList &names);
 
     void writeConfig(const QString &key, const QVariant &value);
     QVariant readConfig(const QString &key, const QVariant &defaultValue) const;
