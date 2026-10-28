@@ -35,6 +35,8 @@ class HeadsetControlDevice : public QObject
     Q_PROPERTY(bool rotateToMute READ rotateToMute WRITE setRotateToMute NOTIFY rotateToMuteChanged FINAL)
     Q_PROPERTY(int microphoneBrightness READ microphoneBrightness WRITE setMicrophoneBrightness NOTIFY microphoneBrightnessChanged FINAL)
     Q_PROPERTY(int microphoneVolume READ microphoneVolume WRITE setMicrophoneVolume NOTIFY microphoneVolumeChanged FINAL)
+    Q_PROPERTY(bool volumeLimiter READ volumeLimiter WRITE setVolumeLimiter NOTIFY volumeLimiterChanged FINAL)
+    Q_PROPERTY(int sidetoneDeviceLevel READ sidetoneDeviceLevel NOTIFY sidetoneDeviceLevelChanged FINAL)
 
     Q_PROPERTY(QAction *reApplyAction READ reApplyAction CONSTANT FINAL)
     Q_PROPERTY(QAction *setPrimaryAction READ setPrimaryAction CONSTANT FINAL)
@@ -54,7 +56,11 @@ public:
         EqualizerPreset = 0x0100,
         Equalizer = 0x0200,
         MicrophoneMuteLedBrightness = 0x0400,
-        MicrophoneVolume = 0x0800
+        MicrophoneVolume = 0x0800,
+        VolumeLimiter = 0x1000,
+        // Not a control: the device reports its stored sidetone level back
+        // (CAP_SIDETONE_STATUS in headsetcontrol's JSON).
+        SidetoneStatus = 0x2000
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
     Q_FLAG(Capabilities)
@@ -105,6 +111,11 @@ public:
     int microphoneVolume() const;
     void setMicrophoneVolume(int volume);
 
+    bool volumeLimiter() const;
+    void setVolumeLimiter(bool state);
+
+    int sidetoneDeviceLevel() const;
+
     QAction *reApplyAction() const;
     QAction *setPrimaryAction() const;
 
@@ -135,6 +146,8 @@ Q_SIGNALS:
     void rotateToMuteChanged();
     void microphoneBrightnessChanged();
     void microphoneVolumeChanged();
+    void volumeLimiterChanged();
+    void sidetoneDeviceLevelChanged();
 
 private:
     Status m_status;
@@ -149,6 +162,7 @@ private:
     int m_chatMix;
 
     Capabilities m_capabilities;
+    int m_sidetoneDeviceLevel;
 
     HeadsetControl *m_headsetControl;
 
@@ -173,6 +187,8 @@ private:
     void applyRotateToMute(bool state, bool force = false);
     void applyMicrophoneBrightness(int brightness, bool force = false);
     void applyMicrophoneVolume(int volume, bool force = false);
+    void applyVolumeLimiter(bool state, bool force = false);
+    void setSidetoneDeviceLevel(int level);
 
     void writeConfig(const QString &key, const QVariant &value);
     QVariant readConfig(const QString &key, const QVariant &defaultValue) const;

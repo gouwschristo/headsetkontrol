@@ -12,6 +12,7 @@ using namespace Qt::Literals::StringLiterals;
 HeadsetControlDevice::HeadsetControlDevice(HeadsetControl *parent)
     : QObject{parent}
     , m_battery{new HeadsetControlDeviceBattery(this)}
+    , m_sidetoneDeviceLevel{-1}
     , m_headsetControl{parent}
 {
     m_reApplyAction = new QAction(this);
@@ -116,6 +117,14 @@ void HeadsetControlDevice::setCapabilities(const QStringList &newCapabilities)
         cap |= MicrophoneVolume;
     }
 
+    if (newCapabilities.contains(u"CAP_VOLUME_LIMITER"_s)) {
+        cap |= VolumeLimiter;
+    }
+
+    if (newCapabilities.contains(u"CAP_SIDETONE_STATUS"_s)) {
+        cap |= SidetoneStatus;
+    }
+
     if (m_capabilities == cap)
         return;
     m_capabilities = cap;
@@ -181,6 +190,14 @@ void HeadsetControlDevice::update(const QVariantHash &hash)
     setProductId(hash.value(u"id_product"_s, QString()).toString());
     setChatMix(hash.value(u"chatmix"_s, 0).toInt());
     setCapabilities(hash.value(u"capabilities"_s, QStringList()).toStringList());
+    // The headset answers with the level it actually stores (headsetcontrol
+    // reports it as sidetone.device_level when the family can be read back).
+    // Shown next to the control so a value that never reached the device is
+    // visible instead of only being remembered by this app.
+    {
+        const QVariantHash sidetone = hash.value(u"sidetone"_s).toHash();
+        setSidetoneDeviceLevel(sidetone.value(u"device_level"_s, -1).toInt());
+    }
     battery()->update(hash.value(u"battery"_s, QStringList()).toHash());
 
     if (product().length() > 0) {
@@ -299,6 +316,29 @@ void HeadsetControlDevice::setMicrophoneVolume(int volume)
     applyMicrophoneVolume(volume);
 }
 
+bool HeadsetControlDevice::volumeLimiter() const
+{
+    return readConfig(u"VolumeLimiter"_s, false).toBool();
+}
+
+void HeadsetControlDevice::setVolumeLimiter(bool state)
+{
+    applyVolumeLimiter(state);
+}
+
+int HeadsetControlDevice::sidetoneDeviceLevel() const
+{
+    return m_sidetoneDeviceLevel;
+}
+
+void HeadsetControlDevice::setSidetoneDeviceLevel(int level)
+{
+    if (m_sidetoneDeviceLevel == level)
+        return;
+    m_sidetoneDeviceLevel = level;
+    Q_EMIT sidetoneDeviceLevelChanged();
+}
+
 QAction *HeadsetControlDevice::reApplyAction() const
 {
     return m_reApplyAction;
@@ -326,6 +366,7 @@ void HeadsetControlDevice::reApply()
     applyInactiveTime(inactiveTime(), true);
     applyEqualizer(equalizer(), true);
     applyEqualizerPreset(equalizerPreset(), true);
+    applyVolumeLimiter(volumeLimiter(), true);
     applyRotateToMute(rotateToMute(), true);
     applyMicrophoneBrightness(microphoneBrightness(), true);
     applyMicrophoneVolume(microphoneVolume(), true);
@@ -476,6 +517,20 @@ void HeadsetControlDevice::applyMicrophoneVolume(int volume, bool force)
         Q_EMIT microphoneVolumeChanged();
 
         m_headsetControl->queue(u"--microphone-volume"_s, QString::number(volume));
+    }
+}
+
+void HeadsetControlDevice::applyVolumeLimiter(bool state, bool force)
+{
+    if (m_capabilities.testFlag(VolumeLimiter)) {
+        if (volumeLimiter() == state && !force)
+            return;
+
+        writeConfig(u"VolumeLimiter"_s, state);
+        Q_EMIT volumeLimiterChanged();
+
+        // headsetcontrol takes this as an explicit 0/1 rather than a flag.
+        m_headsetControl->queue(u"--volume-limiter"_s, state ? u"1"_s : u"0"_s);
     }
 }
 

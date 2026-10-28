@@ -201,7 +201,7 @@ KirigamiFormCard.FormCardPage {
     KirigamiFormCard.FormCard {
         id: configFormCard
 
-        visible: deviceDetailPage.device?.capabilities & (Device.Light | Device.VoicePrompt | Device.Sidetone | Device.InactiveTime | Device.NotificationSound) ?? false
+        visible: deviceDetailPage.device?.capabilities & (Device.Light | Device.VoicePrompt | Device.Sidetone | Device.InactiveTime | Device.NotificationSound | Device.VolumeLimiter | Device.SidetoneStatus) ?? false
 
         KirigamiFormCard.FormSwitchDelegate {
             id: lightDelegate
@@ -243,6 +243,19 @@ KirigamiFormCard.FormCardPage {
             }
         }
 
+        // What the headset itself reports, when it can be read back. The
+        // spinbox above shows the value this app would send; this row shows
+        // the one the device actually holds, so a write that never landed is
+        // visible instead of being remembered only here.
+        KirigamiFormCard.FormTextDelegate {
+            id: sidetoneReadBackDelegate
+
+            visible: (deviceDetailPage.device?.capabilities & Device.SidetoneStatus) !== 0
+                     && (deviceDetailPage.device?.sidetoneDeviceLevel ?? -1) >= 0
+            text: i18nc("@label", "Sidetone stored on the headset")
+            description: i18nc("@info:usagetip", "Level %1", deviceDetailPage.device?.sidetoneDeviceLevel ?? 0)
+        }
+
         KirigamiFormCard.FormSpinBoxDelegate {
             id: inactiveTimeDelegate
 
@@ -262,6 +275,20 @@ KirigamiFormCard.FormCardPage {
             onValueChanged: {
                 if (deviceDetailPage.device)
                     deviceDetailPage.device.inactiveTime = inactiveTimeDelegate.value;
+            }
+        }
+
+        KirigamiFormCard.FormSwitchDelegate {
+            id: volumeLimiterDelegate
+
+            visible: deviceDetailPage.device?.capabilities & Device.VolumeLimiter ?? false
+            text: i18nc("@option:check", "Volume limiter")
+            description: i18nc("@info:usagetip", "Caps the headset's output level")
+
+            checked: deviceDetailPage.device?.volumeLimiter ?? false
+            onCheckedChanged: {
+                if (deviceDetailPage.device)
+                    deviceDetailPage.device.volumeLimiter = volumeLimiterDelegate.checked;
             }
         }
 
