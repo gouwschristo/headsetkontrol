@@ -39,6 +39,8 @@ class HeadsetControlDevice : public QObject
     Q_PROPERTY(int sidetoneDeviceLevel READ sidetoneDeviceLevel NOTIFY sidetoneDeviceLevelChanged FINAL)
     Q_PROPERTY(QStringList equalizerPresetNames READ equalizerPresetNames NOTIFY equalizerPresetNamesChanged FINAL)
     Q_PROPERTY(QList<int> sidetoneLevels READ sidetoneLevels NOTIFY sidetoneLevelsChanged FINAL)
+    Q_PROPERTY(QVariantList parametricBands READ parametricBands NOTIFY parametricBandsChanged FINAL)
+    Q_PROPERTY(QVariantMap parametricLimits READ parametricLimits NOTIFY parametricLimitsChanged FINAL)
 
     Q_PROPERTY(QAction *reApplyAction READ reApplyAction CONSTANT FINAL)
     Q_PROPERTY(QAction *setPrimaryAction READ setPrimaryAction CONSTANT FINAL)
@@ -62,7 +64,8 @@ public:
         VolumeLimiter = 0x1000,
         // Not a control: the device reports its stored sidetone level back
         // (CAP_SIDETONE_STATUS in headsetcontrol's JSON).
-        SidetoneStatus = 0x2000
+        SidetoneStatus = 0x2000,
+        ParametricEqualizer = 0x4000
     };
     Q_DECLARE_FLAGS(Capabilities, Capability)
     Q_FLAG(Capabilities)
@@ -122,6 +125,14 @@ public:
 
     QList<int> sidetoneLevels() const;
 
+    QVariantList parametricBands() const;
+    QVariantMap parametricLimits() const;
+
+    /// Change one field of one band: "frequency", "gain", "qFactor" or "type".
+    Q_INVOKABLE void setParametricBand(int index, const QString &field, const QVariant &value);
+    /// Send the whole curve to the headset in one command.
+    Q_INVOKABLE void applyParametricEqualizer();
+
     QAction *reApplyAction() const;
     QAction *setPrimaryAction() const;
 
@@ -156,6 +167,8 @@ Q_SIGNALS:
     void sidetoneDeviceLevelChanged();
     void equalizerPresetNamesChanged();
     void sidetoneLevelsChanged();
+    void parametricBandsChanged();
+    void parametricLimitsChanged();
 
 private:
     Status m_status;
@@ -173,7 +186,12 @@ private:
     int m_sidetoneDeviceLevel;
     QStringList m_equalizerPresetNames;
     QList<int> m_sidetoneLevels;
+    QVariantList m_parametricBands;
+    QVariantMap m_parametricLimits;
     void setSidetoneLevels(const QList<int> &levels);
+    void setParametricBands(const QVariantList &bands);
+    void setParametricLimits(const QVariantMap &limits);
+    QString parametricEqualizerArgument() const;
 
     HeadsetControl *m_headsetControl;
 

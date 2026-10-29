@@ -339,7 +339,7 @@ KirigamiFormCard.FormCardPage {
     KirigamiFormCard.FormCard {
         id: equalizerFormCard
 
-        visible: deviceDetailPage.device?.capabilities & (Device.Equalizer | Device.EqualizerPreset) ?? false
+        visible: deviceDetailPage.device?.capabilities & (Device.Equalizer | Device.EqualizerPreset | Device.ParametricEqualizer) ?? false
 
         // No idea what the validator is
         FormTextFieldWithButtonDelegate {
@@ -403,6 +403,127 @@ KirigamiFormCard.FormCardPage {
                 if (deviceDetailPage.device) {
                     deviceDetailPage.device.equalizerPreset = equalizerPresetDelegate.currentIndex;
                 }
+            }
+        }
+    }
+
+    KirigamiFormCard.FormHeader {
+        title: i18nc("@title:group", "Parametric equalizer")
+        visible: (deviceDetailPage.device?.capabilities & Device.ParametricEqualizer) !== 0
+                 && deviceDetailPage.device?.parametricBands?.length > 0
+    }
+
+    KirigamiFormCard.FormCard {
+        id: parametricCard
+
+        visible: (deviceDetailPage.device?.capabilities & Device.ParametricEqualizer) !== 0
+                 && deviceDetailPage.device?.parametricBands?.length > 0
+
+        // One row per band. The limits come from the headset (gain range and
+        // step, Q range, frequency range) rather than from numbers guessed
+        // here, so a control can never send a value the device would refuse.
+        Repeater {
+            model: deviceDetailPage.device?.parametricBands ?? []
+
+            KirigamiFormCard.AbstractFormDelegate {
+                id: bandDelegate
+
+                required property int index
+                required property var modelData
+
+                readonly property var limits: deviceDetailPage.device?.parametricLimits ?? ({})
+                readonly property var filterTypes: limits.filterTypes ?? ["peaking"]
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        text: i18nc("@label", "Band %1", bandDelegate.index + 1)
+                    }
+
+                    Controls.Label {
+                        Layout.fillWidth: true
+                        font: Kirigami.Theme.smallFont
+                        opacity: 0.7
+                        text: i18nc("@label", "Frequency, gain and Q")
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Controls.SpinBox {
+                            Layout.fillWidth: true
+                            from: bandDelegate.limits.freqMin ?? 20
+                            to: bandDelegate.limits.freqMax ?? 20000
+                            stepSize: 1
+                            editable: true
+                            value: bandDelegate.modelData.frequency ?? 0
+                            textFromValue: function (v) { return v + " Hz"; }
+                            valueFromText: function (t) { return parseInt(t) || 0; }
+                            onValueModified: {
+                                if (deviceDetailPage.device)
+                                    deviceDetailPage.device.setParametricBand(bandDelegate.index, "frequency", value);
+                            }
+                        }
+
+                        // Gain and Q are fractional, and Qt's SpinBox is
+                        // integer-only (its "decimals" went away in Qt 6), so
+                        // these are validated text fields instead.
+                        Controls.TextField {
+                            Layout.fillWidth: true
+                            text: Number(bandDelegate.modelData.gain ?? 0).toFixed(1)
+                            selectByMouse: true
+                            validator: DoubleValidator {
+                                bottom: bandDelegate.limits.gainMin ?? -10
+                                top: bandDelegate.limits.gainMax ?? 10
+                                decimals: 1
+                            }
+                            onEditingFinished: {
+                                const parsed = parseFloat(text);
+                                if (deviceDetailPage.device && !isNaN(parsed))
+                                    deviceDetailPage.device.setParametricBand(bandDelegate.index, "gain", parsed);
+                            }
+                        }
+
+                        Controls.TextField {
+                            Layout.fillWidth: true
+                            text: Number(bandDelegate.modelData.qFactor ?? 1.41).toFixed(2)
+                            selectByMouse: true
+                            validator: DoubleValidator {
+                                bottom: bandDelegate.limits.qMin ?? 0.2
+                                top: bandDelegate.limits.qMax ?? 10
+                                decimals: 2
+                            }
+                            onEditingFinished: {
+                                const parsed = parseFloat(text);
+                                if (deviceDetailPage.device && !isNaN(parsed))
+                                    deviceDetailPage.device.setParametricBand(bandDelegate.index, "qFactor", parsed);
+                            }
+                        }
+
+                        Controls.ComboBox {
+                            Layout.fillWidth: true
+                            model: bandDelegate.filterTypes
+                            currentIndex: Math.max(0, bandDelegate.filterTypes.indexOf(bandDelegate.modelData.type ?? "peaking"))
+                            onActivated: function (idx) {
+                                if (deviceDetailPage.device)
+                                    deviceDetailPage.device.setParametricBand(bandDelegate.index, "type", bandDelegate.filterTypes[idx]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        KirigamiFormCard.FormButtonDelegate {
+            id: parametricApplyDelegate
+
+            text: i18nc("@action:button", "Apply parametric curve")
+            onClicked: {
+                if (deviceDetailPage.device)
+                    deviceDetailPage.device.applyParametricEqualizer();
             }
         }
     }

@@ -9,6 +9,20 @@
 
 using namespace Qt::Literals::StringLiterals;
 
+namespace
+{
+/// JSON arrays of numbers arrive as QVariantList; convert once, in one place.
+QList<int> intList(const QVariantList &values)
+{
+    QList<int> out;
+    out.reserve(values.size());
+    for (const QVariant &value : values) {
+        out.append(value.toInt());
+    }
+    return out;
+}
+} // namespace
+
 HeadsetControlDevice::HeadsetControlDevice(HeadsetControl *parent)
     : QObject{parent}
     , m_battery{new HeadsetControlDeviceBattery(this)}
@@ -125,6 +139,10 @@ void HeadsetControlDevice::setCapabilities(const QStringList &newCapabilities)
         cap |= SidetoneStatus;
     }
 
+    if (newCapabilities.contains(u"CAP_PARAMETRIC_EQUALIZER"_s)) {
+        cap |= ParametricEqualizer;
+    }
+
     if (m_capabilities == cap)
         return;
     m_capabilities = cap;
@@ -204,6 +222,61 @@ void HeadsetControlDevice::update(const QVariantHash &hash)
     // would not be the Nth preset. Older headsetcontrol builds do not emit
     // the array, and the UI falls back to "Preset N".
     setEqualizerPresetNames(hash.value(u"equalizer_presets_ordered"_s, QStringList()).toStringList());
+
+    // Parametric equalizer: the limits come from the device. The bands only do
+    // when the family can be read back; otherwise the editor starts from the
+    // family's own default frequencies, so it can never invent a layout the
+    // headset does not have.
+    {
+        const QVariantHash peq = hash.value(u"parametric_equalizer"_s).toHash();
+
+        QVariantMap limits;
+        limits.insert(u"bands"_s, peq.value(u"bands"_s).toInt());
+
+        const QVariantHash gain = peq.value(u"gain"_s).toHash();
+        limits.insert(u"gainMin"_s, gain.value(u"min"_s).toDouble());
+        limits.insert(u"gainMax"_s, gain.value(u"max"_s).toDouble());
+        limits.insert(u"gainStep"_s, gain.value(u"step"_s, 0.5).toDouble());
+
+        const QVariantHash q = peq.value(u"q_factor"_s).toHash();
+        limits.insert(u"qMin"_s, q.value(u"min"_s, 0.2).toDouble());
+        limits.insert(u"qMax"_s, q.value(u"max"_s, 10.0).toDouble());
+
+        const QVariantHash freq = peq.value(u"frequency"_s).toHash();
+        limits.insert(u"freqMin"_s, freq.value(u"min"_s, 20).toInt());
+        limits.insert(u"freqMax"_s, freq.value(u"max"_s, 20000).toInt());
+
+        limits.insert(u"filterTypes"_s, peq.value(u"filter_types"_s).toStringList());
+        limits.insert(u"defaultFrequencies"_s, QVariant::fromValue(intList(peq.value(u"default_frequencies"_s).toList())));
+        setParametricLimits(limits);
+
+        QVariantList bands;
+        const QVariantList deviceBands = peq.value(u"current_bands"_s).toList();
+        for (const QVariant &entry : deviceBands) {
+            const QVariantHash band = entry.toHash();
+            if (!band.contains(u"frequency"_s))
+                continue;
+            QVariantMap model;
+            model.insert(u"frequency"_s, band.value(u"frequency"_s).toDouble());
+            model.insert(u"gain"_s, band.value(u"gain"_s).toDouble());
+            model.insert(u"qFactor"_s, band.value(u"q_factor"_s, 1.41).toDouble());
+            model.insert(u"type"_s, band.value(u"type"_s, u"peaking"_s).toString());
+            bands.append(model);
+        }
+
+        if (bands.isEmpty()) {
+            const QList<int> defaults = intList(peq.value(u"default_frequencies"_s).toList());
+            for (const int frequency : defaults) {
+                QVariantMap model;
+                model.insert(u"frequency"_s, frequency);
+                model.insert(u"gain"_s, 0.0);
+                model.insert(u"qFactor"_s, 1.41);
+                model.insert(u"type"_s, u"peaking"_s);
+                bands.append(model);
+            }
+        }
+        setParametricBands(bands);
+    }
 
     // Some devices quantise sidetone: the Nova 5 has 11 steps between 0 and
     // 128, and every other value is silently snapped. Offering the real steps
@@ -369,6 +442,72 @@ void HeadsetControlDevice::setSidetoneLevels(const QList<int> &levels)
     Q_EMIT sidetoneLevelsChanged();
 }
 
+QVariantList HeadsetControlDevice::parametricBands() const
+{
+    return m_parametricBands;
+}
+
+QVariantMap HeadsetControlDevice::parametricLimits() const
+{
+    return m_parametricLimits;
+}
+
+void HeadsetControlDevice::setParametricBands(const QVariantList &bands)
+{
+    if (m_parametricBands == bands)
+        return;
+    m_parametricBands = bands;
+    Q_EMIT parametricBandsChanged();
+}
+
+void HeadsetControlDevice::setParametricLimits(const QVariantMap &limits)
+{
+    if (m_parametricLimits == limits)
+        return;
+    m_parametricLimits = limits;
+    Q_EMIT parametricLimitsChanged();
+}
+
+void HeadsetControlDevice::setParametricBand(int index, const QString &field, const QVariant &value)
+{
+    if (index < 0 || index >= m_parametricBands.size())
+        return;
+
+    QVariantMap band = m_parametricBands.at(index).toMap();
+    if (!band.contains(field) || band.value(field) == value)
+        return;
+
+    band.insert(field, value);
+    m_parametricBands[index] = band;
+    Q_EMIT parametricBandsChanged();
+}
+
+QString HeadsetControlDevice::parametricEqualizerArgument() const
+{
+    // headsetcontrol's format: FREQ,GAIN,Q,TYPE;FREQ,GAIN,Q,TYPE;...
+    QStringList bands;
+    bands.reserve(m_parametricBands.size());
+    for (const QVariant &entry : m_parametricBands) {
+        const QVariantMap band = entry.toMap();
+        bands.append(QStringLiteral("%1,%2,%3,%4")
+                         .arg(band.value(u"frequency"_s).toDouble(), 0, 'f', 0)
+                         .arg(band.value(u"gain"_s).toDouble(), 0, 'f', 1)
+                         .arg(band.value(u"qFactor"_s).toDouble(), 0, 'f', 2)
+                         .arg(band.value(u"type"_s).toString()));
+    }
+    return bands.join(u';');
+}
+
+void HeadsetControlDevice::applyParametricEqualizer()
+{
+    if (!m_capabilities.testFlag(ParametricEqualizer) || m_parametricBands.isEmpty())
+        return;
+
+    const QString argument = parametricEqualizerArgument();
+    writeConfig(u"ParametricEqualizer"_s, argument);
+    m_headsetControl->queue(u"--parametric-equalizer"_s, argument);
+}
+
 void HeadsetControlDevice::setEqualizerPresetNames(const QStringList &names)
 {
     if (m_equalizerPresetNames == names)
@@ -413,6 +552,7 @@ void HeadsetControlDevice::reApply()
     applyEqualizer(equalizer(), true);
     applyEqualizerPreset(equalizerPreset(), true);
     applyVolumeLimiter(volumeLimiter(), true);
+    applyParametricEqualizer();
     applyRotateToMute(rotateToMute(), true);
     applyMicrophoneBrightness(microphoneBrightness(), true);
     applyMicrophoneVolume(microphoneVolume(), true);
