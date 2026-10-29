@@ -31,6 +31,64 @@ KirigamiFormCard.FormCardPage {
         return hz >= 1000 ? (hz / 1000) + " kHz" : hz + " Hz";
     }
 
+    /// Magnitude response of one band at one frequency, in dB. RBJ audio EQ
+    /// cookbook coefficients evaluated on the unit circle; the sample rate
+    /// only has to be comfortably above the top band.
+    function bandResponseDb(band: var, frequency: real): real {
+        const sampleRate = 48000;
+        const f0 = band.frequency ?? 1000;
+        const gain = band.gain ?? 0;
+        const q = Math.max(0.1, band.qFactor ?? 1.41);
+        const type = band.type ?? "peaking";
+        const a = Math.pow(10, gain / 40);
+        const w0 = 2 * Math.PI * f0 / sampleRate;
+        const cosW0 = Math.cos(w0);
+        const sinW0 = Math.sin(w0);
+
+        let b0, b1, b2, a0, a1, a2;
+
+        if (type === "lowshelf" || type === "highshelf") {
+            const alpha = sinW0 / 2 * Math.sqrt((a + 1 / a) * (1 / q - 1) + 2);
+            const beta = 2 * Math.sqrt(a) * alpha;
+            if (type === "lowshelf") {
+                b0 = a * ((a + 1) - (a - 1) * cosW0 + beta);
+                b1 = 2 * a * ((a - 1) - (a + 1) * cosW0);
+                b2 = a * ((a + 1) - (a - 1) * cosW0 - beta);
+                a0 = (a + 1) + (a - 1) * cosW0 + beta;
+                a1 = -2 * ((a - 1) + (a + 1) * cosW0);
+                a2 = (a + 1) + (a - 1) * cosW0 - beta;
+            } else {
+                b0 = a * ((a + 1) + (a - 1) * cosW0 + beta);
+                b1 = -2 * a * ((a - 1) + (a + 1) * cosW0);
+                b2 = a * ((a + 1) + (a - 1) * cosW0 - beta);
+                a0 = (a + 1) - (a - 1) * cosW0 + beta;
+                a1 = 2 * ((a - 1) - (a + 1) * cosW0);
+                a2 = (a + 1) - (a - 1) * cosW0 - beta;
+            }
+        } else {
+            const alpha = sinW0 / (2 * q);
+            b0 = 1 + alpha * a;
+            b1 = -2 * cosW0;
+            b2 = 1 - alpha * a;
+            a0 = 1 + alpha / a;
+            a1 = -2 * cosW0;
+            a2 = 1 - alpha / a;
+        }
+
+        const w = 2 * Math.PI * frequency / sampleRate;
+        const cosW = Math.cos(w);
+        const sinW = Math.sin(w);
+        const numeratorReal = b0 + b1 * cosW + b2 * Math.cos(2 * w);
+        const numeratorImaginary = -(b1 * sinW + b2 * Math.sin(2 * w));
+        const denominatorReal = a0 + a1 * cosW + a2 * Math.cos(2 * w);
+        const denominatorImaginary = -(a1 * sinW + a2 * Math.sin(2 * w));
+        const numerator = numeratorReal * numeratorReal + numeratorImaginary * numeratorImaginary;
+        const denominator = denominatorReal * denominatorReal + denominatorImaginary * denominatorImaginary;
+        if (numerator <= 0 || denominator <= 0)
+            return 0;
+        return 10 * Math.log(numerator / denominator) / Math.LN10;
+    }
+
     title: i18nc("@title:window", "Device details")
 
     actions: [
@@ -229,26 +287,30 @@ KirigamiFormCard.FormCardPage {
 
         // Devices that quantise sidetone publish the steps they actually have
         // (the Nova 5 has 11 between 0 and 128); anything else is snapped
-        // silently, so those get a picker over the real values instead of a
-        // free 0..128 spinner.
-        KirigamiFormCard.FormComboBoxDelegate {
-            id: sidetoneLevelDelegate
+        // silently, so the slider runs over the real steps rather than over a
+        // free 0..128 range.
+        FormSliderDelegate {
+            id: sidetoneSliderDelegate
 
-            visible: (deviceDetailPage.device?.capabilities & Device.Sidetone ?? false)
-                     && (deviceDetailPage.device?.sidetoneLevels?.length ?? 0) > 0
-            text: i18nc("@label:listbox", "Sidetone")
-            // What the headset holds, when it can be read back: a write that
-            // never landed should be visible, not remembered only here.
+            readonly property var levels: deviceDetailPage.device?.sidetoneLevels ?? []
+
+            visible: (deviceDetailPage.device?.capabilities & Device.Sidetone ?? false) && levels.length > 1
+            text: i18nc("@label:slider", "Sidetone")
             description: (deviceDetailPage.device?.capabilities & Device.SidetoneStatus) !== 0
                          && (deviceDetailPage.device?.sidetoneDeviceLevel ?? -1) >= 0
                          ? i18nc("@info:usagetip", "Headset reports level %1",
                                  deviceDetailPage.device?.sidetoneDeviceLevel ?? 0)
                          : ""
-            model: deviceDetailPage.device?.sidetoneLevels ?? []
-            currentIndex: (deviceDetailPage.device?.sidetoneLevels ?? []).indexOf(deviceDetailPage.device?.sidetone ?? 0)
-            onActivated: function (index) {
-                if (deviceDetailPage.device)
-                    deviceDetailPage.device.sidetone = model[index];
+
+            from: 0
+            to: Math.max(0, levels.length - 1)
+            stepSize: 1
+            value: Math.max(0, levels.indexOf(deviceDetailPage.device?.sidetone ?? 0))
+            valueText: levels.length > 0 ? String(levels[Math.round(value)] ?? 0) : ""
+
+            onMoved: {
+                if (deviceDetailPage.device && levels.length > 0)
+                    deviceDetailPage.device.sidetone = levels[Math.round(value)];
             }
         }
 
@@ -259,7 +321,7 @@ KirigamiFormCard.FormCardPage {
             from: 0
             to: 128
             visible: (deviceDetailPage.device?.capabilities & Device.Sidetone ?? false)
-                     && (deviceDetailPage.device?.sidetoneLevels?.length ?? 0) === 0
+                     && (deviceDetailPage.device?.sidetoneLevels?.length ?? 0) <= 1
 
             value: deviceDetailPage.device?.sidetone ?? 0
             onValueChanged: {
@@ -448,10 +510,100 @@ KirigamiFormCard.FormCardPage {
             readonly property real gainMin: limits.gainMin ?? -10
             readonly property real gainMax: limits.gainMax ?? 10
             readonly property real gainStep: limits.gainStep ?? 0.5
+            /// Fixed, so the curve behind the faders can be drawn against
+            /// the same track the faders use.
+            readonly property real columnLabelHeight: Kirigami.Units.gridUnit * 1.0
+            readonly property real faderPadding: Kirigami.Units.gridUnit * 0.55
             readonly property real faderHeight: Kirigami.Units.gridUnit * 7
 
-            contentItem: RowLayout {
-                spacing: Kirigami.Units.smallSpacing
+            contentItem: Item {
+                implicitHeight: faderRow.implicitHeight
+
+                // The sum of every band's response, drawn behind the faders so
+                // the shape of what is being applied is visible while dragging:
+                // a shelf is not a bell, and Q shows up as sharpness.
+                Canvas {
+                    id: responseCanvas
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.leftMargin: Kirigami.Units.gridUnit * 1.6 + Kirigami.Units.smallSpacing
+                    anchors.rightMargin: Kirigami.Units.gridUnit * 1.6 + Kirigami.Units.smallSpacing
+                    anchors.topMargin: faderBankDelegate.columnLabelHeight + Kirigami.Units.smallSpacing / 2
+                                        + faderBankDelegate.faderPadding
+                    anchors.bottomMargin: faderBankDelegate.columnLabelHeight + Kirigami.Units.smallSpacing / 2
+                                           + faderBankDelegate.faderPadding
+
+                    renderStrategy: Canvas.Immediate
+
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
+
+                    Connections {
+                        target: faderBankDelegate
+
+                        function onBandsChanged() {
+                            responseCanvas.requestPaint();
+                        }
+                    }
+
+                    onPaint: {
+                        const context = getContext("2d");
+                        context.clearRect(0, 0, width, height);
+
+                        const bands = faderBankDelegate.bands;
+                        if (bands.length < 2 || width < 8 || height < 8)
+                            return;
+
+                        const first = bands[0].frequency ?? 32;
+                        const last = bands[bands.length - 1].frequency ?? 16000;
+                        const range = Math.max(6, faderBankDelegate.gainMax - faderBankDelegate.gainMin);
+                        const middle = height / 2;
+
+                        // Zero line, so the drawn curve has something to be
+                        // read against.
+                        context.strokeStyle = Qt.rgba(Kirigami.Theme.textColor.r,
+                                                      Kirigami.Theme.textColor.g,
+                                                      Kirigami.Theme.textColor.b, 0.15);
+                        context.lineWidth = 1;
+                        context.beginPath();
+                        context.moveTo(0, middle);
+                        context.lineTo(width, middle);
+                        context.stroke();
+
+                        context.strokeStyle = Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                                      Kirigami.Theme.highlightColor.g,
+                                                      Kirigami.Theme.highlightColor.b, 0.9);
+                        context.lineWidth = 2;
+                        context.lineJoin = "round";
+                        context.beginPath();
+
+                        const steps = 120;
+                        for (let step = 0; step <= steps; ++step) {
+                            const t = step / steps;
+                            const frequency = first * Math.pow(last / first, t);
+                            let decibels = 0;
+                            for (const band of bands) {
+                                decibels += deviceDetailPage.bandResponseDb(band, frequency);
+                            }
+                            const x = t * width;
+                            const y = middle - (decibels / range) * height;
+                            if (step === 0)
+                                context.moveTo(x, y);
+                            else
+                                context.lineTo(x, y);
+                        }
+                        context.stroke();
+                    }
+                }
+
+                RowLayout {
+                    id: faderRow
+
+                    anchors.fill: parent
+                    spacing: Kirigami.Units.smallSpacing
 
                 // Left scale, so a fader position can be read as a number
                 // without selecting it.
@@ -511,7 +663,9 @@ KirigamiFormCard.FormCardPage {
                             readonly property bool selected: deviceDetailPage.selectedBand === faderColumn.index
 
                             Layout.fillWidth: true
+                            Layout.preferredHeight: faderBankDelegate.columnLabelHeight
                             horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                             font: Kirigami.Theme.smallFont
                             opacity: selected ? 1 : 0.8
                             color: selected ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
@@ -549,50 +703,47 @@ KirigamiFormCard.FormCardPage {
                             }
                         }
 
-                        Controls.Slider {
+                        // A fader in the hardware sense: absolute position,
+                        // boost up, cut down. Qt's vertical slider runs the
+                        // other way and positions its own handle, so the
+                        // geometry here is explicit instead.
+                        Item {
                             id: gainFader
+
+                            readonly property real trackInset: faderBankDelegate.faderPadding
+                            readonly property real trackHeight: height - 2 * trackInset
+                            readonly property real gainSpan: Math.max(0.001, faderBankDelegate.gainMax - faderBankDelegate.gainMin)
+                            readonly property real normalised: (faderColumn.bandGain - faderBankDelegate.gainMin) / gainSpan
+
+                            /// Where the drag started, so a slow drag is not
+                            /// eaten by rounding.
+                            property real dragStartGain: faderColumn.bandGain
 
                             Layout.fillWidth: true
                             Layout.preferredWidth: 0
                             Layout.preferredHeight: faderBankDelegate.faderHeight
-                            orientation: Qt.Vertical
-                            from: faderBankDelegate.gainMin
-                            to: faderBankDelegate.gainMax
-                            stepSize: faderBankDelegate.gainStep
-                            snapMode: Controls.Slider.SnapAlways
-                            value: faderColumn.bandGain
-                            onMoved: {
-                                faderColumn.bandGain = value;
-                                deviceDetailPage.selectedBand = faderColumn.index;
-                            }
-                            onPressedChanged: {
-                                if (pressed) {
-                                    deviceDetailPage.selectedBand = faderColumn.index;
-                                } else if (deviceDetailPage.device) {
-                                    deviceDetailPage.device.setParametricBand(faderColumn.index, "gain", faderColumn.bandGain);
-                                    deviceDetailPage.device.applyParametricEqualizer();
-                                }
-                            }
 
-                            // Hardware-style groove and fader cap.
-                            background: Rectangle {
-                                x: Math.round((gainFader.width - width) / 2)
+                            Rectangle {
+                                x: Math.round((parent.width - width) / 2)
+                                y: gainFader.trackInset
                                 width: Kirigami.Units.gridUnit * 0.4
-                                height: gainFader.availableHeight
-                                y: gainFader.topPadding
+                                height: gainFader.trackHeight
                                 radius: width / 2
                                 color: Qt.rgba(0, 0, 0, 0.35)
                                 border.color: Qt.rgba(1, 1, 1, 0.12)
                             }
 
-                            handle: Rectangle {
+                            Rectangle {
+                                id: faderCap
+
+                                readonly property real travel: gainFader.trackHeight - height
+
                                 x: Math.round((gainFader.width - width) / 2)
-                                y: gainFader.topPadding
-                                   + (1.0 - gainFader.visualPosition) * (gainFader.availableHeight - height)
+                                y: gainFader.trackInset + (1.0 - Math.max(0, Math.min(1, gainFader.normalised))) * travel
                                 width: Kirigami.Units.gridUnit * 1.4
                                 height: Kirigami.Units.gridUnit * 1.1
                                 radius: Math.min(width, height) / 4
-                                color: gainFader.pressed
+                                color: faderDrag.active
                                     ? Kirigami.Theme.highlightColor
                                     : Qt.rgba(Kirigami.Theme.textColor.r,
                                               Kirigami.Theme.textColor.g,
@@ -608,11 +759,63 @@ KirigamiFormCard.FormCardPage {
                                     color: Qt.rgba(0, 0, 0, 0.55)
                                 }
                             }
+
+                            function commit(): void {
+                                if (!deviceDetailPage.device)
+                                    return;
+                                deviceDetailPage.device.setParametricBand(faderColumn.index, "gain", faderColumn.bandGain);
+                                deviceDetailPage.device.applyParametricEqualizer();
+                            }
+
+                            function gainAt(y: real): real {
+                                const travel = Math.max(1, trackHeight - faderCap.height);
+                                const ratio = Math.max(0, Math.min(1, 1.0 - (y - trackInset) / travel));
+                                const raw = faderBankDelegate.gainMin + ratio * gainSpan;
+                                const step = Math.max(0.01, faderBankDelegate.gainStep);
+                                return Math.round(raw / step) * step;
+                            }
+
+                            DragHandler {
+                                id: faderDrag
+
+                                target: null
+                                xAxis.enabled: false
+                                cursorShape: Qt.SplitVCursor
+
+                                onActiveChanged: {
+                                    if (active) {
+                                        gainFader.dragStartGain = faderColumn.bandGain;
+                                        deviceDetailPage.selectedBand = faderColumn.index;
+                                    } else {
+                                        gainFader.commit();
+                                    }
+                                }
+
+                                onTranslationChanged: {
+                                    if (!active)
+                                        return;
+                                    const travel = Math.max(1, gainFader.trackHeight - faderCap.height);
+                                    const delta = -translation.y / travel * gainFader.gainSpan;
+                                    const step = Math.max(0.01, faderBankDelegate.gainStep);
+                                    const next = gainFader.dragStartGain + delta;
+                                    faderColumn.bandGain = Math.round(next / step) * step;
+                                }
+                            }
+
+                            TapHandler {
+                                onTapped: function (eventPoint) {
+                                    deviceDetailPage.selectedBand = faderColumn.index;
+                                    faderColumn.bandGain = gainFader.gainAt(eventPoint.position.y);
+                                    gainFader.commit();
+                                }
+                            }
                         }
 
                         Controls.Label {
                             Layout.fillWidth: true
+                            Layout.preferredHeight: faderBankDelegate.columnLabelHeight
                             horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                             font: Kirigami.Theme.smallFont
                             opacity: 0.8
                             text: i18nc("@label decibel value", "%1 dB", faderColumn.bandGain.toFixed(1))
@@ -652,6 +855,7 @@ KirigamiFormCard.FormCardPage {
                     }
                 }
             }
+                }
         }
 
     }

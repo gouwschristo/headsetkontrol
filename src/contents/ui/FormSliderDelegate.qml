@@ -11,6 +11,11 @@ KirigamiFormCard.AbstractFormDelegate {
     property alias to: slider.to
     property alias stepSize: slider.stepSize
 
+    /// Shown under the label, for a reading that is not the slider position.
+    property string description: ""
+    /// Shown instead of the raw value, for sliders that run over indices.
+    property string valueText: ""
+
     signal moved
 
     hoverEnabled: false
@@ -24,6 +29,15 @@ KirigamiFormCard.AbstractFormDelegate {
 
             text: sliderDelegate.text
             visible: sliderDelegate.text
+        }
+
+        Controls.Label {
+            Layout.fillWidth: true
+
+            font: Kirigami.Theme.smallFont
+            opacity: 0.7
+            text: sliderDelegate.description
+            visible: sliderDelegate.description.length > 0
         }
 
         RowLayout {
@@ -41,7 +55,7 @@ KirigamiFormCard.AbstractFormDelegate {
                 Layout.preferredWidth: Kirigami.Units.gridUnit
 
                 horizontalAlignment: Controls.Label.AlignRight
-                text: slider.value
+                text: sliderDelegate.valueText ? sliderDelegate.valueText : slider.value
             }
         }
     }

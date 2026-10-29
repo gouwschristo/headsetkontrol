@@ -1,5 +1,6 @@
 import QtQuick
 import org.kde.kirigami as Kirigami
+import QtQuick.Window
 import org.kde.kirigamiaddons.statefulapp as StatefulApplication
 
 import com.gitlab.thebill2001.headsetkontrol
@@ -13,6 +14,11 @@ StatefulApplication.StatefulWindow {
 
     minimumWidth: Kirigami.Units.gridUnit * 50
     minimumHeight: Kirigami.Units.gridUnit * 20
+
+    // A control panel, not a document: open at a size where the whole panel is
+    // visible instead of at whatever the window manager last used.
+    width: Math.min(Screen.width - Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 60)
+    height: Math.min(Screen.height - Kirigami.Units.gridUnit * 6, Kirigami.Units.gridUnit * 54)
 
     property Device selectedDevice: null
 
