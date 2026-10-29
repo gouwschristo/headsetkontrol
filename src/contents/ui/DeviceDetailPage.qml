@@ -17,6 +17,9 @@ KirigamiFormCard.FormCardPage {
     /// Which band the detail card is editing; touching a fader selects it.
     property int selectedBand: 0
 
+    readonly property bool microphoneCapable:
+        (device?.capabilities & (Device.MicrophoneMuteLedBrightness | Device.MicrophoneVolume)) !== 0
+
     function selectedBandData(): var {
         const bands = device?.parametricBands ?? [];
         if (bands.length < 1)
@@ -76,20 +79,6 @@ KirigamiFormCard.FormCardPage {
     }
 
 
-    // Controls on the left, the tall curve editors on the right, so the whole
-    // panel fits on one screen without scrolling.
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 0
-
-        ColumnLayout {
-            id: controlColumn
-
-            Layout.fillWidth: true
-            Layout.minimumWidth: Kirigami.Units.gridUnit * 15
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 24
-            spacing: 0
-
     KirigamiFormCard.FormHeader {
         title: i18nc("@title:group", "Device")
     }
@@ -97,82 +86,103 @@ KirigamiFormCard.FormCardPage {
     // One block for everything the headset reports about itself. The IDs only
     // matter when something is wrong, so they ride along as a description
     // instead of taking rows of their own.
+    // Everything the headset reports about itself, on one line: the ids only
+    // matter when something is wrong, so they are the small print, and the two
+    // readings are meters rather than rows of their own.
     KirigamiFormCard.FormCard {
-        KirigamiFormCard.FormTextDelegate {
-            text: deviceDetailPage.device?.product ?? ""
-            description: {
-                const d = deviceDetailPage.device;
-                if (!d)
-                    return "";
-
-                const ids = i18nc("@info:usagetip", "Product ID %1, vendor ID %2",
-                                  d.productId ?? "", d.vendorId ?? "");
-                return d.device ? `${d.device} (${ids})` : ids;
-            }
-        }
-
         KirigamiFormCard.AbstractFormDelegate {
-            visible: deviceDetailPage.device?.capabilities & Device.ChatMix ?? false
             hoverEnabled: false
             background: null
 
             contentItem: RowLayout {
-                spacing: Kirigami.Units.smallSpacing
+                spacing: Kirigami.Units.largeSpacing
 
-                Controls.Label {
-                    text: i18nc("@label", "Chat-Mix level")
-                }
-
-                Controls.ProgressBar {
+                ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: Kirigami.Units.gridUnit * 8
+                    spacing: 0
 
-                    from: 0
-                    to: 128
-                    value: deviceDetailPage.device?.chatMix ?? 0
+                    Controls.Label {
+                        id: productLabel
+
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: deviceDetailPage.device?.product ?? ""
+
+                        HoverHandler {
+                            id: productHover
+                        }
+
+                        Controls.ToolTip.visible: productHover.hovered
+                        Controls.ToolTip.text: {
+                            const d = deviceDetailPage.device;
+                            if (!d)
+                                return "";
+
+                            return i18nc("@info:usagetip", "%1, product ID %2, vendor ID %3",
+                                         d.device ?? "", d.productId ?? "", d.vendorId ?? "");
+                        }
+                    }
                 }
 
-                Controls.Label {
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 2
-                    horizontalAlignment: Text.AlignRight
+                RowLayout {
+                    visible: deviceDetailPage.device?.capabilities & Device.ChatMix ?? false
+                    spacing: Kirigami.Units.smallSpacing
 
-                    text: deviceDetailPage.device?.chatMix ?? ""
-                }
-            }
-        }
+                    Controls.Label {
+                        font: Kirigami.Theme.smallFont
+                        text: i18nc("@label", "Chat-Mix")
+                    }
 
-        KirigamiFormCard.AbstractFormDelegate {
-            visible: deviceDetailPage.device?.capabilities & Device.Battery ?? false
-            hoverEnabled: false
-            background: null
+                    Controls.ProgressBar {
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                        Layout.minimumWidth: Kirigami.Units.gridUnit * 2
 
-            contentItem: RowLayout {
-                spacing: Kirigami.Units.smallSpacing
+                        from: 0
+                        to: 128
+                        value: deviceDetailPage.device?.chatMix ?? 0
+                    }
 
-                Controls.Label {
-                    text: i18nc("@label", "Battery")
-                }
-
-                Controls.ProgressBar {
-                    Layout.fillWidth: true
-
-                    from: 0
-                    to: 100
-                    value: deviceDetailPage.device?.battery.level ?? 0
+                    Controls.Label {
+                        font: Kirigami.Theme.smallFont
+                        text: deviceDetailPage.device?.chatMix ?? ""
+                    }
                 }
 
-                Controls.Label {
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
-                    horizontalAlignment: Text.AlignRight
+                RowLayout {
+                    visible: deviceDetailPage.device?.capabilities & Device.Battery ?? false
+                    spacing: Kirigami.Units.smallSpacing
 
-                    text: {
-                        const battery = deviceDetailPage.device?.battery;
-                        if (!battery)
-                            return "";
-                        if (battery.level < 0)
-                            return i18nc("@item battery status", "Unavailable");
-                        if (battery.status === DeviceBattery.Charging)
-                            return i18nc("@item battery status", "Charging %1%", battery.level);
-                        return `${battery.level}%`;
+                    Controls.Label {
+                        font: Kirigami.Theme.smallFont
+                        text: i18nc("@label", "Battery")
+                    }
+
+                    Controls.ProgressBar {
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                        Layout.minimumWidth: Kirigami.Units.gridUnit * 2
+
+                        from: 0
+                        to: 100
+                        value: deviceDetailPage.device?.battery.level ?? 0
+                    }
+
+                    Controls.Label {
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                        Layout.rightMargin: Kirigami.Units.smallSpacing
+                        horizontalAlignment: Text.AlignRight
+                        font: Kirigami.Theme.smallFont
+
+                        text: {
+                            const battery = deviceDetailPage.device?.battery;
+                            if (!battery)
+                                return "";
+                            if (battery.level < 0)
+                                return i18nc("@item battery status", "Unavailable");
+                            if (battery.status === DeviceBattery.Charging)
+                                return i18nc("@item battery status", "Charging %1%", battery.level);
+                            return `${battery.level}%`;
+                        }
                     }
                 }
             }
@@ -187,7 +197,10 @@ KirigamiFormCard.FormCardPage {
     KirigamiFormCard.FormCard {
         id: configFormCard
 
-        visible: deviceDetailPage.device?.capabilities & (Device.Light | Device.VoicePrompt | Device.Sidetone | Device.InactiveTime | Device.NotificationSound | Device.VolumeLimiter | Device.SidetoneStatus) ?? false
+        visible: deviceDetailPage.microphoneCapable
+                 || ((deviceDetailPage.device?.capabilities
+                      & (Device.Light | Device.VoicePrompt | Device.Sidetone | Device.InactiveTime
+                         | Device.NotificationSound | Device.VolumeLimiter | Device.SidetoneStatus)) ?? false)
 
         KirigamiFormCard.FormSwitchDelegate {
             id: lightDelegate
@@ -224,6 +237,13 @@ KirigamiFormCard.FormCardPage {
             visible: (deviceDetailPage.device?.capabilities & Device.Sidetone ?? false)
                      && (deviceDetailPage.device?.sidetoneLevels?.length ?? 0) > 0
             text: i18nc("@label:listbox", "Sidetone")
+            // What the headset holds, when it can be read back: a write that
+            // never landed should be visible, not remembered only here.
+            description: (deviceDetailPage.device?.capabilities & Device.SidetoneStatus) !== 0
+                         && (deviceDetailPage.device?.sidetoneDeviceLevel ?? -1) >= 0
+                         ? i18nc("@info:usagetip", "Headset reports level %1",
+                                 deviceDetailPage.device?.sidetoneDeviceLevel ?? 0)
+                         : ""
             model: deviceDetailPage.device?.sidetoneLevels ?? []
             currentIndex: (deviceDetailPage.device?.sidetoneLevels ?? []).indexOf(deviceDetailPage.device?.sidetone ?? 0)
             onActivated: function (index) {
@@ -246,19 +266,6 @@ KirigamiFormCard.FormCardPage {
                 if (deviceDetailPage.device)
                     deviceDetailPage.device.sidetone = sidetoneDelegate.value;
             }
-        }
-
-        // What the headset itself reports, when it can be read back. The
-        // spinbox above shows the value this app would send; this row shows
-        // the one the device actually holds, so a write that never landed is
-        // visible instead of being remembered only here.
-        KirigamiFormCard.FormTextDelegate {
-            id: sidetoneReadBackDelegate
-
-            visible: (deviceDetailPage.device?.capabilities & Device.SidetoneStatus) !== 0
-                     && (deviceDetailPage.device?.sidetoneDeviceLevel ?? -1) >= 0
-            text: i18nc("@label", "Sidetone stored on the headset")
-            description: i18nc("@info:usagetip", "Level %1", deviceDetailPage.device?.sidetoneDeviceLevel ?? 0)
         }
 
         KirigamiFormCard.FormSpinBoxDelegate {
@@ -315,16 +322,6 @@ KirigamiFormCard.FormCardPage {
                 }
             }
         }
-    }
-    KirigamiFormCard.FormHeader {
-        title: i18nc("@title:group", "Microphone")
-        visible: mircophoneFormCard.visible
-    }
-
-    KirigamiFormCard.FormCard {
-        id: mircophoneFormCard
-
-        visible: deviceDetailPage.device?.capabilities & (Device.MicrophoneMuteLedBrightness | Device.MicrophoneVolume) ?? false
 
         FormSliderDelegate {
             id: microphoneLightBrightnessDelegate
@@ -360,16 +357,6 @@ KirigamiFormCard.FormCardPage {
             }
         }
     }
-        }
-
-        ColumnLayout {
-            id: curveColumn
-
-            Layout.fillWidth: true
-            Layout.minimumWidth: Kirigami.Units.gridUnit * 26
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 34
-            spacing: 0
-
     KirigamiFormCard.FormHeader {
         title: i18nc("@title:group", "Equalizer")
         visible: equalizerFormCard.visible
@@ -384,7 +371,10 @@ KirigamiFormCard.FormCardPage {
         FormTextFieldWithButtonDelegate {
             id: equalizerDelegate
 
-            visible: deviceDetailPage.device?.capabilities & Device.Equalizer ?? false
+            // Only for devices without a parametric editor: two ways to write
+            // the same curve invites writing the wrong one.
+            visible: (deviceDetailPage.device?.capabilities & Device.Equalizer ?? false)
+                     && !deviceDetailPage.parametricSectionVisible
             label: i18nc("@label:textbox", "Equalizer curve")
             placeholderText: i18nc("@info:placeholder", "Values separated by spaces, or commas")
             buttonText: i18nc("@action:button", "Apply")
@@ -444,17 +434,9 @@ KirigamiFormCard.FormCardPage {
                 }
             }
         }
-    }
-    KirigamiFormCard.FormHeader {
-        title: i18nc("@title:group", "Parametric equalizer")
-        visible: parametricSectionVisible
-    }
-
-    // A ten-band fader bank, the way the hardware exposes these: frequencies
-    // across the top, a shared dB scale at the edges, one fader per band.
-    KirigamiFormCard.FormCard {
-        visible: parametricSectionVisible
-
+        // A ten-band fader bank, the way the hardware exposes these:
+        // frequencies across the top, a shared dB scale at the edges, one
+        // fader per band.
         KirigamiFormCard.AbstractFormDelegate {
             id: faderBankDelegate
 
@@ -466,7 +448,7 @@ KirigamiFormCard.FormCardPage {
             readonly property real gainMin: limits.gainMin ?? -10
             readonly property real gainMax: limits.gainMax ?? 10
             readonly property real gainStep: limits.gainStep ?? 0.5
-            readonly property real faderHeight: Kirigami.Units.gridUnit * 12
+            readonly property real faderHeight: Kirigami.Units.gridUnit * 8
 
             contentItem: RowLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -517,6 +499,10 @@ KirigamiFormCard.FormCardPage {
                         /// resets on every write, which would end the drag.
                         property real bandGain: modelData.gain ?? 0
 
+                        HoverHandler {
+                            id: faderColumnHover
+                        }
+
                         Layout.fillWidth: true
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 1.4
                         spacing: Kirigami.Units.smallSpacing / 2
@@ -529,9 +515,37 @@ KirigamiFormCard.FormCardPage {
                             font: Kirigami.Theme.smallFont
                             opacity: selected ? 1 : 0.8
                             color: selected ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+
+                            // The band's shape rides along with its
+                            // frequency: a shelf band is not a bell, and the
+                            // difference should be visible without opening
+                            // anything.
                             text: {
                                 const f = faderColumn.modelData.frequency ?? 0;
-                                return f >= 1000 ? (f / 1000) + "K" : String(Math.round(f));
+                                const label = f >= 1000 ? (f / 1000) + "K" : String(Math.round(f));
+                                switch (faderColumn.modelData.type) {
+                                case "lowshelf":
+                                    return label + " LS";
+                                case "highshelf":
+                                    return label + " HS";
+                                case "lowpass":
+                                    return label + " LP";
+                                case "highpass":
+                                    return label + " HP";
+                                default:
+                                    return label;
+                                }
+                            }
+
+                            Controls.ToolTip.visible: faderColumnHover.hovered
+                            Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
+                            Controls.ToolTip.text: {
+                                const band = faderColumn.modelData;
+                                return i18nc("@info:tooltip", "%1 Hz, gain %2 dB, Q %3, %4",
+                                             Math.round(band.frequency ?? 0),
+                                             (band.gain ?? 0).toFixed(1),
+                                             (band.qFactor ?? 1.41).toFixed(2),
+                                             band.type ?? "peaking");
                             }
                         }
 
@@ -556,6 +570,7 @@ KirigamiFormCard.FormCardPage {
                                     deviceDetailPage.selectedBand = faderColumn.index;
                                 } else if (deviceDetailPage.device) {
                                     deviceDetailPage.device.setParametricBand(faderColumn.index, "gain", faderColumn.bandGain);
+                                    deviceDetailPage.device.applyParametricEqualizer();
                                 }
                             }
 
@@ -639,98 +654,5 @@ KirigamiFormCard.FormCardPage {
             }
         }
 
-        KirigamiFormCard.FormDelegateSeparator {
-        }
-
-        KirigamiFormCard.FormComboBoxDelegate {
-            id: bandSelectorDelegate
-
-            readonly property var bands: deviceDetailPage.device?.parametricBands ?? []
-
-            text: i18nc("@label:listbox", "Band")
-            model: bands.map((band, index) => ({
-                "display": i18nc("@item:inlistbox", "Band %1, %2", index + 1,
-                                 deviceDetailPage.formatFrequency(band.frequency ?? 0)),
-                "value": index
-            }))
-            textRole: "display"
-            valueRole: "value"
-            currentIndex: deviceDetailPage.selectedBand
-            onActivated: {
-                deviceDetailPage.selectedBand = currentValue;
-            }
-
-            Connections {
-                target: deviceDetailPage
-
-                function onSelectedBandChanged() {
-                    bandSelectorDelegate.currentIndex = deviceDetailPage.selectedBand;
-                }
-            }
-        }
-
-        KirigamiFormCard.FormSpinBoxDelegate {
-            id: bandQDelegate
-
-            readonly property var band: deviceDetailPage.selectedBandData()
-
-            label: i18nc("@label:spinbox", "Q factor")
-            // Qt's SpinBox is integer-only, so Q runs in hundredths.
-            from: Math.round((deviceDetailPage.device?.parametricLimits?.qMin ?? 0.2) * 100)
-            to: Math.round((deviceDetailPage.device?.parametricLimits?.qMax ?? 10) * 100)
-            stepSize: 1
-            value: Math.round((band.qFactor ?? 1.41) * 100)
-            textFromValue: function (v) {
-                return (v / 100).toFixed(2);
-            }
-            valueFromText: function (t) {
-                return Math.round((parseFloat(t) || 0) * 100);
-            }
-            onValueModified: {
-                if (deviceDetailPage.device)
-                    deviceDetailPage.device.setParametricBand(deviceDetailPage.selectedBand, "qFactor", value / 100);
-            }
-
-            Connections {
-                target: deviceDetailPage
-
-                function onSelectedBandChanged() {
-                    bandQDelegate.value = Math.round((deviceDetailPage.selectedBandData().qFactor ?? 1.41) * 100);
-                }
-            }
-        }
-
-        KirigamiFormCard.FormComboBoxDelegate {
-            id: bandFilterDelegate
-
-            readonly property var band: deviceDetailPage.selectedBandData()
-            readonly property var filterTypes: deviceDetailPage.device?.parametricLimits?.filterTypes ?? ["peaking"]
-
-            text: i18nc("@label:listbox", "Filter")
-            model: filterTypes
-            currentIndex: Math.max(0, filterTypes.indexOf(band.type ?? "peaking"))
-            onActivated: {
-                if (deviceDetailPage.device)
-                    deviceDetailPage.device.setParametricBand(deviceDetailPage.selectedBand, "type", filterTypes[currentIndex]);
-            }
-
-            Connections {
-                target: deviceDetailPage
-
-                function onSelectedBandChanged() {
-                    bandFilterDelegate.currentIndex = Math.max(0, bandFilterDelegate.filterTypes.indexOf(deviceDetailPage.selectedBandData().type ?? "peaking"));
-                }
-            }
-        }
-
-        KirigamiFormCard.FormButtonDelegate {
-            text: i18nc("@action:button", "Apply parametric curve")
-            onClicked: {
-                if (deviceDetailPage.device)
-                    deviceDetailPage.device.applyParametricEqualizer();
-            }
-        }
-    }
-        }
     }
 }
