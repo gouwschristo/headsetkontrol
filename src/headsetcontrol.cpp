@@ -1,7 +1,11 @@
 #include <QDebug>
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
+#include <QStandardPaths>
 #include <qapplicationstatic.h>
 
 #include <KLocalizedString>
@@ -13,6 +17,23 @@
 using namespace Qt::Literals::StringLiterals;
 
 Q_APPLICATION_STATIC(HeadsetControl, globalInstance, QCoreApplication::instance())
+
+namespace
+{
+// App image launchers and desktop sessions rarely have ~/.local/bin on PATH.
+QString chatMixHelper()
+{
+    const QString onPath = QStandardPaths::findExecutable(u"chatmix"_s);
+    if (!onPath.isEmpty())
+        return onPath;
+
+    const QString local = QDir::homePath() + u"/.local/bin/chatmix"_s;
+    if (QFileInfo(local).isExecutable())
+        return local;
+
+    return {};
+}
+}
 
 HeadsetControl::HeadsetControl(QObject *parent)
     : QObject{parent}
@@ -237,6 +258,8 @@ void HeadsetControl::run()
 
     m_queue->addProcess(HeadsetKontrolConfig::instance()->executablePath(), argsList);
     m_queue->start();
+
+    refreshChatMix();
 }
 
 QList<HeadsetControlDevice *> HeadsetControl::devices() const
@@ -252,6 +275,85 @@ qint32 HeadsetControl::countDownTime() const
 bool HeadsetControl::isRunning() const
 {
     return m_timer.isActive();
+}
+
+bool HeadsetControl::chatMixAvailable() const
+{
+    return m_chatMixAvailable;
+}
+
+int HeadsetControl::chatMixBalance() const
+{
+    return m_chatMixBalance;
+}
+
+void HeadsetControl::setChatMixAvailable(bool available)
+{
+    if (m_chatMixAvailable == available)
+        return;
+    m_chatMixAvailable = available;
+    Q_EMIT chatMixAvailableChanged();
+}
+
+void HeadsetControl::setChatMixBalance(int balance)
+{
+    balance = qBound(0, balance, 100);
+    if (m_chatMixBalance == balance)
+        return;
+    m_chatMixBalance = balance;
+    Q_EMIT chatMixBalanceChanged();
+}
+
+// The headset has no chat-mix command: the Nova 5 has no dial (that is the 5X)
+// and the status report leaves the game/chat bytes at zero. On Windows the
+// feature is the GG/Sonar slider over two virtual devices, so here it is the
+// `chatmix` helper over the Game/Chat sinks, which reports 0-100.
+void HeadsetControl::refreshChatMix()
+{
+    const QString helper = chatMixHelper();
+    if (helper.isEmpty()) {
+        setChatMixAvailable(false);
+        return;
+    }
+
+    auto *process = new QProcess(this);
+    process->setProgram(helper);
+    process->setArguments({u"get"_s});
+
+    connect(process, &QProcess::finished, this, [this, process](int exitCode, QProcess::ExitStatus) {
+        process->deleteLater();
+
+        const bool available = exitCode == 0;
+        setChatMixAvailable(available);
+        if (!available)
+            return;
+
+        bool ok = false;
+        const int balance = QString::fromUtf8(process->readAllStandardOutput()).trimmed().toInt(&ok);
+        if (ok)
+            setChatMixBalance(balance);
+    });
+
+    connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError) {
+        process->deleteLater();
+        setChatMixAvailable(false);
+    });
+
+    process->start();
+}
+
+void HeadsetControl::applyChatMixBalance(int balance)
+{
+    const QString helper = chatMixHelper();
+    if (helper.isEmpty())
+        return;
+
+    auto *process = new QProcess(this);
+    process->setProgram(helper);
+    process->setArguments({u"set"_s, QString::number(qBound(0, balance, 100))});
+    connect(process, &QProcess::finished, process, &QProcess::deleteLater);
+    connect(process, &QProcess::errorOccurred, process, &QProcess::deleteLater);
+    process->start();
 }
 
 void HeadsetControl::setHidApiVersion(const QString &newHidApiVersion)

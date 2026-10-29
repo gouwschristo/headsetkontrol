@@ -176,8 +176,13 @@ KirigamiFormCard.FormCardPage {
                     }
                 }
 
+                // Chat-mix has no command in headsetcontrol: this model has
+                // no dial at all, and the status report leaves the game and
+                // chat bytes at zero. Windows gets it from GG/Sonar scaling
+                // two virtual devices, so here it balances the ChatMix Game
+                // and ChatMix Chat sinks once they are running.
                 RowLayout {
-                    visible: deviceDetailPage.device?.capabilities & Device.ChatMix ?? false
+                    visible: HeadsetControl.chatMixAvailable || (deviceDetailPage.device?.capabilities & Device.ChatMix ?? false)
                     spacing: Kirigami.Units.smallSpacing
 
                     Controls.Label {
@@ -190,16 +195,30 @@ KirigamiFormCard.FormCardPage {
                             id: chatMixHover
                         }
 
-                        // headsetcontrol exposes chat-mix as a read only
-                        // value: the balance is reported by the headset and
-                        // there is no command to set it, so this row is a
-                        // reading and not a control.
                         Controls.ToolTip.visible: chatMixHover.hovered
                         Controls.ToolTip.delay: Kirigami.Units.toolTipDelay
-                        Controls.ToolTip.text: i18nc("@info:tooltip", "Reported by the headset; headsetcontrol cannot set it")
+                        Controls.ToolTip.text: HeadsetControl.chatMixAvailable
+                            ? i18nc("@info:tooltip", "Scales the ChatMix Game and ChatMix Chat sinks: the headset has no chat-mix command")
+                            : i18nc("@info:tooltip", "Reported by the headset; headsetcontrol cannot set it")
                     }
 
+                    Controls.Slider {
+                        visible: HeadsetControl.chatMixAvailable
+
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 6
+                        Layout.minimumWidth: Kirigami.Units.gridUnit * 4
+
+                        from: 0
+                        to: 100
+                        stepSize: 1
+                        value: HeadsetControl.chatMixBalance
+                        onMoved: HeadsetControl.applyChatMixBalance(value)
+                    }
+
+                    // Nothing to control: show what the headset reports.
                     Controls.ProgressBar {
+                        visible: !HeadsetControl.chatMixAvailable
+
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 2
 
@@ -210,7 +229,9 @@ KirigamiFormCard.FormCardPage {
 
                     Controls.Label {
                         font: Kirigami.Theme.smallFont
-                        text: deviceDetailPage.device?.chatMix ?? ""
+                        text: HeadsetControl.chatMixAvailable
+                            ? HeadsetControl.chatMixBalance
+                            : (deviceDetailPage.device?.chatMix ?? "")
                     }
                 }
 

@@ -20,6 +20,11 @@ class HeadsetControl : public QObject
     Q_PROPERTY(QList<HeadsetControlDevice *> devices READ devices NOTIFY devicesChanged FINAL)
     Q_PROPERTY(qint32 countDownTime READ countDownTime NOTIFY countDownTimeChanged FINAL)
     Q_PROPERTY(bool isRunning READ isRunning NOTIFY isRunningChanged FINAL)
+    /// Software chat-mix: the Game/Chat virtual sinks exist and can be
+    /// balanced. The headset itself has no chat-mix command, so this is the
+    /// mixer-side equivalent of the Windows slider.
+    Q_PROPERTY(bool chatMixAvailable READ chatMixAvailable NOTIFY chatMixAvailableChanged FINAL)
+    Q_PROPERTY(int chatMixBalance READ chatMixBalance NOTIFY chatMixBalanceChanged FINAL)
 public:
     explicit HeadsetControl(QObject *parent);
 
@@ -38,6 +43,9 @@ public:
     qint32 countDownTime() const;
     bool isRunning() const;
 
+    bool chatMixAvailable() const;
+    int chatMixBalance() const;
+
     HeadsetControlDevice *getDevice(const QString &vendorId, const QString &productId);
 
 public Q_SLOTS:
@@ -45,6 +53,10 @@ public Q_SLOTS:
     void stop();
     void refresh();
     void queue(const QString &arg, const QVariant &value);
+
+    void refreshChatMix();
+    /// 0 = all game, 50 = centre, 100 = all chat.
+    void applyChatMixBalance(int balance);
 
     void stopCountDownUpdateTimer();
     void startCountDownUpdateTimer();
@@ -60,6 +72,8 @@ Q_SIGNALS:
     void deviceErrorOccurred(HeadsetControlDevice *device, const QString &error);
     void countDownTimeChanged();
     void isRunningChanged();
+    void chatMixAvailableChanged();
+    void chatMixBalanceChanged();
 
 private Q_SLOTS:
     void onUpdated(const QByteArray &data);
@@ -82,7 +96,12 @@ private:
 
     QList<HeadsetControlDevice *> m_devices;
 
+    bool m_chatMixAvailable = false;
+    int m_chatMixBalance = 50;
+
     void setIsPathValid(bool newIsPathValid);
+    void setChatMixAvailable(bool available);
+    void setChatMixBalance(int balance);
     void setVersion(const QString &newVersion);
     void setApiVersion(const QString &newApiVersion);
     void setHidApiVersion(const QString &newHidApiVersion);
