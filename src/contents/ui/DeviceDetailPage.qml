@@ -135,7 +135,7 @@ KirigamiFormCard.FormCardPage {
                     }
 
                     Controls.ProgressBar {
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 2
 
                         from: 0
@@ -159,7 +159,7 @@ KirigamiFormCard.FormCardPage {
                     }
 
                     Controls.ProgressBar {
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 2
 
                         from: 0
@@ -168,7 +168,7 @@ KirigamiFormCard.FormCardPage {
                     }
 
                     Controls.Label {
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 4
                         Layout.rightMargin: Kirigami.Units.smallSpacing
                         horizontalAlignment: Text.AlignRight
                         font: Kirigami.Theme.smallFont
@@ -448,7 +448,7 @@ KirigamiFormCard.FormCardPage {
             readonly property real gainMin: limits.gainMin ?? -10
             readonly property real gainMax: limits.gainMax ?? 10
             readonly property real gainStep: limits.gainStep ?? 0.5
-            readonly property real faderHeight: Kirigami.Units.gridUnit * 8
+            readonly property real faderHeight: Kirigami.Units.gridUnit * 7
 
             contentItem: RowLayout {
                 spacing: Kirigami.Units.smallSpacing
