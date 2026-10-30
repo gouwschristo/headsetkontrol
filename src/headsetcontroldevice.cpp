@@ -273,18 +273,48 @@ void HeadsetControlDevice::update(const QVariantHash &hash)
             bands.append(model);
         }
 
-        if (bands.isEmpty()) {
-            const QList<int> defaults = intList(peq.value(u"default_frequencies"_s).toList());
-            for (const int frequency : defaults) {
+        if (!bands.isEmpty()) {
+            setParametricBands(bands);
+        } else if (m_parametricBands.isEmpty()) {
+            // Nothing to read back: a write answers without state and this
+            // family cannot be asked yet. Seeding the editor again on every
+            // poll is what made a hand-made curve snap back to the preset
+            // values, so this only runs while there is no curve at all, and it
+            // prefers the one this app last applied.
+            const QStringList saved = readConfig(u"ParametricEqualizer"_s, QString()).toString().split(u';', Qt::SkipEmptyParts);
+            QVariantList restored;
+            for (const QString &entry : saved) {
+                const QStringList fields = entry.split(u',');
+                if (fields.size() != 4)
+                    continue;
+                bool gainOk = false;
+                const double gain = fields.at(1).toDouble(&gainOk);
+                if (!gainOk)
+                    continue;
+
                 QVariantMap model;
-                model.insert(u"frequency"_s, frequency);
-                model.insert(u"gain"_s, 0.0);
-                model.insert(u"qFactor"_s, 1.41);
-                model.insert(u"type"_s, u"peaking"_s);
-                bands.append(model);
+                model.insert(u"frequency"_s, fields.at(0).toDouble());
+                model.insert(u"gain"_s, gain);
+                model.insert(u"qFactor"_s, fields.at(2).toDouble());
+                model.insert(u"type"_s, fields.at(3));
+                restored.append(model);
+            }
+
+            if (!restored.isEmpty()) {
+                setParametricBands(restored);
+            } else {
+                const QList<int> defaults = intList(peq.value(u"default_frequencies"_s).toList());
+                for (const int frequency : defaults) {
+                    QVariantMap model;
+                    model.insert(u"frequency"_s, frequency);
+                    model.insert(u"gain"_s, 0.0);
+                    model.insert(u"qFactor"_s, 1.41);
+                    model.insert(u"type"_s, u"peaking"_s);
+                    bands.append(model);
+                }
+                setParametricBands(bands);
             }
         }
-        setParametricBands(bands);
     }
 
     // Some devices quantise sidetone: the Nova 5 has 11 steps between 0 and

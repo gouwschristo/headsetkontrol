@@ -472,6 +472,9 @@ KirigamiFormCard.FormCardPage {
 
             visible: deviceDetailPage.device?.capabilities & Device.EqualizerPreset ?? false
             text: i18nc("@label:listbox", "Equalizer preset")
+            // A preset is a complete curve: picking one replaces whatever the
+            // faders hold, which is worth saying next to the control.
+            description: parametricSectionVisible ? i18nc("@info:usagetip", "A preset replaces the curve below") : ""
             // Names come from headsetcontrol in --equalizer-preset index
             // order; without them (older builds) fall back to the numbers.
             model: {
