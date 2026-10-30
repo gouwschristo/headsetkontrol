@@ -313,11 +313,15 @@ KirigamiFormCard.FormCardPage {
 
             visible: (deviceDetailPage.device?.capabilities & Device.Sidetone ?? false) && levels.length > 1
             text: i18nc("@label:slider", "Sidetone")
-            description: (deviceDetailPage.device?.capabilities & Device.SidetoneStatus) !== 0
-            && (deviceDetailPage.device?.sidetoneDeviceLevel ?? -1) >= 0
-            ? i18nc("@info:usagetip", "Headset reports level %1",
-                    deviceDetailPage.device?.sidetoneDeviceLevel ?? 0)
-            : ""
+            description: {
+                const stored = deviceDetailPage.device?.sidetoneDeviceLevel ?? -1;
+                if (((deviceDetailPage.device?.capabilities ?? 0) & Device.SidetoneStatus) === 0 || stored < 0)
+                    return "";
+
+                // stored is the device's own step index, not the level: map it
+                // back through the steps the headset publishes.
+                return i18nc("@info:usagetip", "Headset reports level %1", levels[stored] ?? stored);
+            }
 
             from: 0
             to: Math.max(0, levels.length - 1)

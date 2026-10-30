@@ -206,13 +206,21 @@ void HeadsetControlDevice::update(const QVariantHash &hash)
     setProduct(hash.value(u"product"_s, QString()).toString());
     setVendorId(hash.value(u"id_vendor"_s, QString()).toString());
     setProductId(hash.value(u"id_product"_s, QString()).toString());
-    setChatMix(hash.value(u"chatmix"_s, 0).toInt());
-    setCapabilities(hash.value(u"capabilities"_s, QStringList()).toStringList());
+    // A write answers with an action result, not a state snapshot: `-o json -s
+    // 40` carries the identity and the capabilities but no battery, chat-mix or
+    // sidetone. Reading the absent keys as defaults would blank the panel for a
+    // poll cycle every time a control is used, which looks exactly like the
+    // headset disconnecting and coming back. So state is only applied when the
+    // response actually carries it.
+    if (hash.contains(u"chatmix"_s))
+        setChatMix(hash.value(u"chatmix"_s).toInt());
+    if (hash.contains(u"capabilities"_s))
+        setCapabilities(hash.value(u"capabilities"_s, QStringList()).toStringList());
     // The headset answers with the level it actually stores (headsetcontrol
     // reports it as sidetone.device_level when the family can be read back).
     // Shown next to the control so a value that never reached the device is
     // visible instead of only being remembered by this app.
-    {
+    if (hash.contains(u"sidetone"_s)) {
         const QVariantHash sidetone = hash.value(u"sidetone"_s).toHash();
         setSidetoneDeviceLevel(sidetone.value(u"device_level"_s, -1).toInt());
     }
@@ -221,13 +229,14 @@ void HeadsetControlDevice::update(const QVariantHash &hash)
     // preserved by every JSON reader (Qt sorts object keys), so the Nth name
     // would not be the Nth preset. Older headsetcontrol builds do not emit
     // the array, and the UI falls back to "Preset N".
-    setEqualizerPresetNames(hash.value(u"equalizer_presets_ordered"_s, QStringList()).toStringList());
+    if (hash.contains(u"equalizer_presets_ordered"_s))
+        setEqualizerPresetNames(hash.value(u"equalizer_presets_ordered"_s, QStringList()).toStringList());
 
     // Parametric equalizer: the limits come from the device. The bands only do
     // when the family can be read back; otherwise the editor starts from the
     // family's own default frequencies, so it can never invent a layout the
     // headset does not have.
-    {
+    if (hash.contains(u"parametric_equalizer"_s)) {
         const QVariantHash peq = hash.value(u"parametric_equalizer"_s).toHash();
 
         QVariantMap limits;
@@ -282,7 +291,7 @@ void HeadsetControlDevice::update(const QVariantHash &hash)
     // 128, and every other value is silently snapped. Offering the real steps
     // is the difference between a control that means something and one that
     // guesses for the user.
-    {
+    if (hash.contains(u"sidetone"_s)) {
         QList<int> levels;
         const QVariantList raw = hash.value(u"sidetone"_s).toHash().value(u"levels"_s).toList();
         levels.reserve(raw.size());
@@ -291,7 +300,8 @@ void HeadsetControlDevice::update(const QVariantHash &hash)
         }
         setSidetoneLevels(levels);
     }
-    battery()->update(hash.value(u"battery"_s, QStringList()).toHash());
+    if (hash.contains(u"battery"_s))
+        battery()->update(hash.value(u"battery"_s).toHash());
 
     if (product().length() > 0) {
         m_setPrimaryAction->setData(product());
